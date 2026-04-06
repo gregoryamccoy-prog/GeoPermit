@@ -1,0 +1,451 @@
+
+PRD — Local Change Monitor
+1. Product name
+
+Local Change Monitor
+
+2. Product goal
+
+Build a TypeScript web application that helps users monitor construction permits, right-of-way work, and eventually traffic/road closures around Louisville and nearby Oldham County, with map-based exploration and location alerts.
+
+3. Problem
+
+Public permit and road-impact data exists, but it is fragmented, hard to interpret, and not proactive. Users care about:
+
+what is changing near them
+when it starts and ends
+whether it is likely to affect traffic, noise, development momentum, or property value
+4. Primary users
+Small real estate investors
+Landlords
+Contractors / subs
+Homeowners who want neighborhood-change alerts
+5. Core value proposition
+
+Turn raw government geospatial data into:
+
+a clean map
+filtered nearby activity
+alerts for new relevant events
+derived “impact” and “momentum” signals
+6. Scope
+MVP
+Interactive map of Louisville permit and ROW work data
+Search by address or map movement
+Radius filter
+Permit detail popups
+Saved locations
+Email alerts for new nearby activity
+v1
+Weekly summaries
+Basic impact scoring
+Category filtering
+Louisville + state road-impact sources
+v2
+Oldham County enrichment
+Trend scoring
+Contractor intelligence
+commute-oriented closure summaries
+7. Recommended tech stack
+Front end
+TypeScript
+Next.js or React + Vite
+Leaflet for MVP
+OpenStreetMap-based tiles for low-cost development
+Back end
+Node.js + TypeScript
+Fastify or Express
+Scheduled ingestion jobs
+Local database for testing
+
+Use PostgreSQL + PostGIS. It is free, local, and the correct tool for geospatial radius queries, indexing, and future scaling. PostGIS is the decisive reason; SQLite is simpler, but it is the wrong long-term choice for this product. PostgreSQL itself is free software, and PostGIS is an open-source spatial extender for PostgreSQL.
+
+Local install recommendation
+
+Use Docker first:
+
+docker run --name local-change-monitor-db \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_DB=local_change_monitor \
+  -p 5432:5432 \
+  -d postgis/postgis:16-3.4
+
+That is the cleanest local dev setup.
+
+8. Verified public data sources
+A. Louisville active construction permits
+
+Louisville Metro publishes Active Construction Permits as a public ArcGIS dataset. The dataset describes fields including permit number, type, status, contractor, work type, zoning, square footage, project costs, address, district, neighborhood, and issue date. The ArcGIS GeoService endpoint is public.
+
+Dataset page
+
+https://louisville-metro-opendata-lojic.hub.arcgis.com/datasets/LOJIC::louisville-metro-ky-active-construction-permits
+
+ArcGIS Feature Layer
+https://services1.arcgis.com/79kfd2K6fskCAkyg/arcgis/rest/services/active_construction_permits/FeatureServer/0
+
+Example query URL
+https://services1.arcgis.com/79kfd2K6fskCAkyg/arcgis/rest/services/active_construction_permits/FeatureServer/0/query?where=1%3D1&outFields=*&resultRecordCount=1&f=pjson
+
+GeoJSON download
+https://louisville-metro-opendata-lojic.hub.arcgis.com/api/download/v1/items/0251a88cefdc4ab3a0d85943074e6d7b/geojson?layers=0
+
+B. Louisville ROW construction permits
+
+Louisville also publishes ROW Construction Permits, described as approved and currently issued right-of-way construction permits limited to projects that affect roadway traffic. The resource is public and exposed as an ArcGIS FeatureServer layer.
+
+Dataset page
+
+https://data.lojic.org/datasets/louisville-metro-ky-row-construction-permits/about
+
+ArcGIS Feature Layer
+https://services1.arcgis.com/79kfd2K6fskCAkyg/arcgis/rest/services/Louisville_KY_ROW_Construction_Permits_new/FeatureServer/0
+
+Example query URL
+https://services1.arcgis.com/79kfd2K6fskCAkyg/arcgis/rest/services/Louisville_KY_ROW_Construction_Permits_new/FeatureServer/0/query?where=1%3D1&outFields=*&resultRecordCount=1&f=pjson
+
+C. Kentucky statewide road / traffic data
+
+KYTC’s “All Data” page explicitly links to:
+
+REST End Points: Vector - KYTC
+Kentucky thematic layers REST endpoints
+Spatial API Services
+GoKY road conditions site
+
+So there is public, developer-oriented access for Kentucky transportation data, but I did not verify in this pass a single clean “road closures” JSON endpoint you can drop in immediately. The safest statement is: the state offers public APIs / REST endpoints, and you should inspect the live Swagger / REST catalogs to pick the exact closure/incidents feed you want.
+
+Relevant statewide links
+
+KYTC data hub:
+
+https://transportation.ky.gov/Maps/Pages/All-Data.aspx
+
+KYTC vector REST endpoints:
+
+https://maps.kytc.ky.gov
+
+Kentucky thematic REST endpoints:
+
+https://kygisserver.ky.gov
+
+KYTC Spatial API docs:
+
+https://kytc-api-v100-lts-qrntk7e3ra-uc.a.run.app/docs
+
+GoKY road conditions:
+
+https://goky.ky.gov
+
+D. Oldham County permit data status
+
+Oldham County publicly exposes:
+
+Building permits/applications/forms
+Planning & Development information
+county GIS mapping
+contact info for Building & Inspections and Mapping/GIS
+
+What I could not verify is a public live permit API comparable to Louisville’s ArcGIS service. So in the PRD, treat Oldham as phase 2 / uncertain-source integration rather than guaranteed API ingestion.
+
+Relevant Oldham links
+
+Building info:
+
+https://www.oldhamcountyky.gov/BuildingInfo
+
+Planning & Development:
+
+https://www.oldhamcountyky.gov/planningdevelopment
+
+County GIS mapping:
+
+https://ocpdsgis.maps.arcgis.com
+
+9. Sample JSON payloads
+
+These are trimmed directly from the public ArcGIS query responses so you know what the real shape looks like.
+
+A. Louisville active construction permits — sample
+{
+  "objectIdFieldName": "ObjectId",
+  "geometryType": "esriGeometryPoint",
+  "features": [
+    {
+      "attributes": {
+        "PERMIT_NUMBER": "14BL1477",
+        "PERMIT_TYPE": "Residential New",
+        "PERMIT_STATUS": "Issued",
+        "CONTRACTOR": "HOWELL CONSTRUCTION",
+        "ZONING": "R5",
+        "SQFT": 574,
+        "PERMIT_FEE": 63.14,
+        "PROJECT_COSTS": 13000,
+        "ADDRESS": "2517 GARDINER LN",
+        "CITY": "LOUISVILLE",
+        "STATE": "KY",
+        "ZIPCODE": "40205-0000",
+        "LATITUDE": 38.21578881,
+        "LONGITUDE": -85.66514333,
+        "DISTRICT": "26",
+        "NEIGHBORHOOD": "HAWTHORNE",
+        "ISSUE_DATE": 1393218000000,
+        "ObjectId": 1
+      },
+      "geometry": {
+        "x": -9536200.134228397,
+        "y": 4609954.544137082
+      }
+    }
+  ]
+}
+
+B. Louisville ROW construction permits — sample
+{
+  "objectIdFieldName": "ObjectId",
+  "geometryType": "esriGeometryPoint",
+  "features": [
+    {
+      "attributes": {
+        "PERMIT_NO": "PW-REP-26-01055",
+        "APPLICANT_NAME": "Louisville Gas & Electric Company",
+        "FROM_DATE": 1775793600000,
+        "TO_DATE": 1778212800000,
+        "WORK_DESCRIPTION": "LGE work on Gardiner Ln ... application to close westbound curb lane ...",
+        "WORK_TYPE": "Lane Closure",
+        "STREET_ADDRESS": "1219 GARDINER LN",
+        "CITY": "WATTERSON PARK",
+        "STATE": "KY",
+        "ZIP": "40213",
+        "LONGITUDE": -85.70511724503672,
+        "LATITUDE": 38.19315403998219,
+        "ObjectId": 1
+      },
+      "geometry": {
+        "x": -9540650.010095296,
+        "y": 4606748.049559852
+      }
+    }
+  ]
+}
+
+10. Database schema
+
+This is the schema I’d start with. It is intentionally normalized enough to be useful, but not overbuilt.
+
+PostGIS setup
+CREATE EXTENSION IF NOT EXISTS postgis;
+Source systems
+CREATE TABLE source_systems (
+  id SERIAL PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  base_url TEXT,
+  notes TEXT
+);
+Raw ingested records
+
+Keep the original payload. You will want it later.
+
+CREATE TABLE raw_ingest_events (
+  id BIGSERIAL PRIMARY KEY,
+  source_system_id INT NOT NULL REFERENCES source_systems(id),
+  source_dataset TEXT NOT NULL,
+  source_record_id TEXT,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  payload JSONB NOT NULL
+);
+
+CREATE INDEX idx_raw_ingest_source_dataset
+  ON raw_ingest_events (source_system_id, source_dataset);
+
+CREATE INDEX idx_raw_ingest_payload_gin
+  ON raw_ingest_events USING GIN (payload);
+Locations users care about
+CREATE TABLE watch_locations (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  address TEXT,
+  geom GEOGRAPHY(POINT, 4326) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_watch_locations_geom
+  ON watch_locations USING GIST (geom);
+Permits
+CREATE TABLE permits (
+  id BIGSERIAL PRIMARY KEY,
+  source_system_id INT NOT NULL REFERENCES source_systems(id),
+  source_dataset TEXT NOT NULL,
+  source_record_id TEXT NOT NULL,
+  permit_number TEXT,
+  permit_type TEXT,
+  permit_status TEXT,
+  category_name TEXT,
+  work_type TEXT,
+  contractor TEXT,
+  applicant_name TEXT,
+  work_description TEXT,
+  zoning TEXT,
+  sqft NUMERIC,
+  permit_fee NUMERIC,
+  project_costs NUMERIC,
+  address TEXT,
+  city TEXT,
+  state TEXT,
+  zipcode TEXT,
+  district TEXT,
+  neighborhood TEXT,
+  start_date TIMESTAMPTZ,
+  end_date TIMESTAMPTZ,
+  issue_date TIMESTAMPTZ,
+  geom GEOGRAPHY(POINT, 4326),
+  raw_payload JSONB NOT NULL,
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  UNIQUE (source_system_id, source_dataset, source_record_id)
+);
+
+CREATE INDEX idx_permits_geom
+  ON permits USING GIST (geom);
+
+CREATE INDEX idx_permits_issue_date
+  ON permits (issue_date DESC);
+
+CREATE INDEX idx_permits_type_status
+  ON permits (permit_type, permit_status);
+
+CREATE INDEX idx_permits_raw_payload_gin
+  ON permits USING GIN (raw_payload);
+Saved user alerts
+CREATE TABLE users (
+  id BIGSERIAL PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE alert_rules (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users(id),
+  name TEXT NOT NULL,
+  center_geom GEOGRAPHY(POINT, 4326) NOT NULL,
+  radius_meters INT NOT NULL,
+  include_permit_types TEXT[],
+  include_work_types TEXT[],
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_alert_rules_geom
+  ON alert_rules USING GIST (center_geom);
+Alert deliveries
+CREATE TABLE alert_matches (
+  id BIGSERIAL PRIMARY KEY,
+  alert_rule_id BIGINT NOT NULL REFERENCES alert_rules(id),
+  permit_id BIGINT NOT NULL REFERENCES permits(id),
+  matched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  delivery_status TEXT NOT NULL DEFAULT 'pending',
+  UNIQUE (alert_rule_id, permit_id)
+);
+11. Key geospatial queries
+Find permits within 1 mile of a saved point
+SELECT p.*
+FROM permits p
+WHERE p.geom IS NOT NULL
+  AND ST_DWithin(
+    p.geom,
+    ST_SetSRID(ST_MakePoint(-85.615, 38.326), 4326)::geography,
+    1609.34
+  )
+ORDER BY p.issue_date DESC NULLS LAST;
+Find new permits for a user’s alert rule
+SELECT p.*, ar.id AS alert_rule_id
+FROM alert_rules ar
+JOIN permits p
+  ON p.geom IS NOT NULL
+ AND ST_DWithin(p.geom, ar.center_geom, ar.radius_meters)
+WHERE ar.user_id = $1
+  AND ar.is_active = TRUE
+  AND p.first_seen_at >= NOW() - INTERVAL '1 day';
+12. Ingestion approach
+Louisville construction permits
+
+Poll every 6–12 hours at first.
+
+Use the ArcGIS query API:
+
+where=1=1
+outFields=*
+f=pjson
+consider paging because the layer max record count is 1000 on both verified Louisville layers
+Louisville ROW permits
+
+Same pattern. Treat these as traffic-impact events, not just permits.
+
+Oldham County
+
+Do not block the MVP on this. Put it behind a feature flag:
+
+phase 1: no live Oldham permit feed
+phase 2: manual import / open records / if a real GIS layer is found later, wire it in
+State road/closure data
+
+Inspect KYTC’s Swagger and REST catalogs and integrate whichever feed gives:
+
+active closures
+incident windows
+route IDs / road names
+start and end timestamps
+13. MVP UI requirements
+Main map page
+Full-screen map
+Toggle layers:
+Louisville active construction permits
+Louisville ROW construction permits
+state closures/incidents when added
+Filters
+address search
+radius selector
+permit type
+work type
+issue/start date
+active only
+Popups
+
+For construction permits:
+
+permit number
+permit type
+status
+address
+contractor
+project cost
+issue date
+
+For ROW permits:
+
+permit number
+work type
+street address
+applicant
+start/end date
+work description
+Saved alerts
+save current map center as watched location
+choose radius
+choose included types
+email alerts daily or immediately
+14. Risks
+Data quality
+
+ArcGIS sources are usable, but field values are messy and descriptions are human-entered. Expect cleanup work.
+
+Oldham gap
+
+Oldham public permit forms and GIS are visible, but a public live permit API was not verified. That means your “Louisville + Oldham” goal is uneven on day one.
+
+State closure feed ambiguity
+
+KYTC clearly offers public developer endpoints, but the exact closure/incidents feed still needs a short implementation spike.
